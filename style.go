@@ -29,11 +29,9 @@ var (
 	styleAccent  lipgloss.Style
 	stylePrimary lipgloss.Style
 
-	// styleHeader/styleFooter are the top/bottom chrome bars - background
-	// $panel (footer separately themeable, see Theme.FooterBackground -
-	// solarized is the one built-in theme that actually overrides it).
-	styleHeader            lipgloss.Style
-	styleHeaderSubtitle    lipgloss.Style
+	// styleFooter is the bottom chrome bar - background $panel by default
+	// (see Theme.FooterBackground - solarized is the one built-in theme
+	// that actually overrides it).
 	styleFooter            lipgloss.Style
 	styleFooterKey         lipgloss.Style
 	styleFooterDescription lipgloss.Style
@@ -71,9 +69,20 @@ var (
 	// theme except rose-pine-dawn - approximated as $primary throughout).
 	styleTableCursor lipgloss.Style
 
-	// styleLedgerHeaderText is Bold with *no* baked-in background, unlike
-	// the package-level styleBold - see its call site in view.go for why.
+	// styleLedgerHeaderText/styleLedgerError/styleLedgerSuccess are plain
+	// foreground-only styles with *no* baked-in background, unlike the
+	// package-level styleBold/styleError/styleSuccess (which bake in the
+	// general canvas background via applyTheme's bg helper) - every
+	// ledger row's background comes entirely from repaintLedgerView
+	// (panel for the header, primary for the selected row, surface for
+	// everything else), and a cell that sets its own background fights
+	// that: it was overriding the selected row's highlight for whichever
+	// cell happened to be colored (the amount/balance columns), leaving a
+	// canvas-colored gap in the middle of an otherwise fully-highlighted
+	// row.
 	styleLedgerHeaderText lipgloss.Style
+	styleLedgerError      lipgloss.Style
+	styleLedgerSuccess    lipgloss.Style
 
 	appBackground lipgloss.Color
 	appForeground lipgloss.Color
@@ -138,13 +147,6 @@ func applyTheme(t Theme) {
 	styleAccent = bg(lipgloss.NewStyle().Foreground(colorAccent))
 	stylePrimary = bg(lipgloss.NewStyle().Foreground(colorPrimary))
 
-	headerBG := t.Panel
-	styleHeader = lipgloss.NewStyle().Foreground(t.Foreground)
-	if headerBG != "" {
-		styleHeader = styleHeader.Background(headerBG)
-	}
-	styleHeaderSubtitle = styleHeader.Faint(true)
-
 	footerBG := t.FooterBackground
 	styleFooter = lipgloss.NewStyle().Foreground(t.FooterForeground)
 	if footerBG != "" {
@@ -168,6 +170,8 @@ func applyTheme(t Theme) {
 	primaryFG := cursorForeground(t)
 	styleTableCursor = lipgloss.NewStyle().Bold(true).Background(colorPrimary).Foreground(primaryFG)
 	styleLedgerHeaderText = lipgloss.NewStyle().Bold(true)
+	styleLedgerError = lipgloss.NewStyle().Foreground(colorError)
+	styleLedgerSuccess = lipgloss.NewStyle().Foreground(colorSuccess)
 
 	canvasRepaint = ""
 	panelRepaint = ""

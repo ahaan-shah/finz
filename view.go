@@ -48,34 +48,18 @@ func (m *model) applySizes() {
 
 // -- header / footer -------------------------------------------------------
 
-// renderHeader mirrors Textual's Header widget layout exactly: an 8-column
-// docked-left icon block (1 pad + icon + 6 pad, per HeaderIcon's own
-// `padding: 0 1; width: 8`), a 10-column docked-right (empty) clock space,
-// and the title/subtitle centered in whatever's left between them.
+// renderHeader is just the centered "Tally — Finance Tracker" title, no
+// bar/background/icon/clock-space of its own - matches splitsy's own
+// title treatment exactly (plain text, centered, sitting directly on the
+// app's canvas background) rather than reproducing Textual's docked-icon-
+// block-plus-panel-colored-bar Header widget, which - on top of not being
+// what was asked for here - was the source of a color leaking onto the
+// very next line (see repaintWith's doc comment): a colored bar has to
+// close cleanly, and a plain title sitting on the ambient canvas color
+// never has that problem in the first place.
 func (m model) renderHeader() string {
-	const iconWidth = 8
-	const clockWidth = 10
-	middleWidth := m.width - iconWidth - clockWidth
-	if middleWidth < 0 {
-		middleWidth = 0
-	}
-
-	title := "Tally"
-	subtitle := " — Finance Tracker"
-	plainWidth := lipgloss.Width(title) + lipgloss.Width(subtitle)
-	pad := middleWidth - plainWidth
-	if pad < 0 {
-		pad = 0
-	}
-	left := pad / 2
-	right := pad - left
-
-	icon := styleHeader.Render(padRight(" ⭘", iconWidth))
-	middle := styleHeader.Render(strings.Repeat(" ", left)+title) + styleHeaderSubtitle.Render(subtitle) + styleHeader.Render(strings.Repeat(" ", right))
-	clock := styleHeader.Render(strings.Repeat(" ", clockWidth))
-
-	line := icon + middle + clock
-	return repaintWith(line, panelRepaint)
+	titleText := styleBold.Render("Tally") + styleMuted.Render(" — Finance Tracker")
+	return lipgloss.NewStyle().Width(m.width).Align(lipgloss.Center).Render(titleText)
 }
 
 // renderFooter mirrors Footer: key hints on the left (a/e/d/q hidden
@@ -280,13 +264,13 @@ func (m model) renderTableStage() string {
 
 	lines := []string{header}
 	for i, rt := range texts {
-		amountStyle := styleError
+		amountStyle := styleLedgerError
 		if rt.amountIsIncome {
-			amountStyle = styleSuccess
+			amountStyle = styleLedgerSuccess
 		}
 		balanceStyle := lipgloss.NewStyle()
 		if rt.balanceNegative {
-			balanceStyle = styleError.Bold(true)
+			balanceStyle = styleLedgerError.Bold(true)
 		}
 
 		line := " " + padRight(rt.date, ledgerDateWidth) + "  " +
@@ -424,7 +408,12 @@ func (m model) renderSidebar() string {
 func (m model) renderBudgetBox() string {
 	innerWidth := 28
 	title := " Budget "
-	dashes := innerWidth - lipgloss.Width(title)
+	// -1: the "─" literal right after "╭" below isn't counted by
+	// lipgloss.Width(title) - forgetting it made the top border exactly
+	// one column wider than the sides/bottom (innerWidth+3 instead of
+	// the innerWidth+2 every other edge uses), which is what pushed the
+	// top-right corner out past the rest of the box.
+	dashes := innerWidth - lipgloss.Width(title) - 1
 	if dashes < 0 {
 		dashes = 0
 	}
