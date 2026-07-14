@@ -254,7 +254,7 @@ func renderPaletteList(title string, filter textinput.Model, opts []paletteOptio
 	var b strings.Builder
 	b.WriteString(styleModalTitle.Render(title))
 	b.WriteString("\n")
-	b.WriteString(styleModalFilterBox.Width(36).Render(filter.View()))
+	b.WriteString(styleFilterBox.Width(36).Render(filter.View()))
 	b.WriteString("\n\n")
 
 	if len(opts) == 0 {

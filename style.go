@@ -48,12 +48,11 @@ var (
 	styleModalBoxDanger lipgloss.Style
 	styleModalTitle     lipgloss.Style
 
-	// styleModalFilterBox boxes the command palette's search Input -
-	// splitsy's rounded-border convention, distinct from the tall-bordered
-	// boxes the year/month picker still uses (that picker stays faithful
-	// to Textual's own Input/OptionList look, which nothing here asked to
-	// change).
-	styleModalFilterBox lipgloss.Style
+	// styleFilterBox boxes every boxed single-line Input in the app (the
+	// year/month picker's filter, the budget input, the command palette's
+	// search box) - splitsy's rounded-border convention exactly, replacing
+	// Textual's much heavier "tall" block-glyph border this used to draw.
+	styleFilterBox lipgloss.Style
 
 	// styleFieldLabel/Focused are the add/edit form's row labels - fixed
 	// width, muted normally, bold+accent (with a "▸" prefix) while that
@@ -96,28 +95,12 @@ var (
 	surfaceRepaint string
 	primaryRepaint string
 
-	// primaryMarker is primaryRepaint's background code alone - the exact
-	// prefix bubbles/table's styles.Selected wrap emits for the cursor
-	// row, used to tell that row's already-composed line apart from every
-	// other line when repainting the table's rendered output (see
-	// repaintTableView).
+	// primaryMarker is the bare SGR parameter (see sgrParam) for
+	// colorPrimary's background - used with lineHasSGRParam to tell the
+	// ledger's cursor row apart from every other line when repainting the
+	// table's rendered output (see repaintLedgerView).
 	primaryMarker string
 )
-
-// tallBorder reproduces Textual's built-in "tall" border character set
-// exactly (textual/_border.py: BORDER_LOCATIONS["tall"] /
-// BORDER_CHARS["tall"]) - the default border Input and OptionList both
-// draw, distinct from any of lipgloss's own preset borders.
-var tallBorder = lipgloss.Border{
-	Top:         "▔",
-	Bottom:      "▁",
-	Left:        "▊",
-	Right:       "▎",
-	TopLeft:     "▊",
-	TopRight:    "▎",
-	BottomLeft:  "▊",
-	BottomRight: "▎",
-}
 
 func init() {
 	applyTheme(activeTheme)
@@ -176,7 +159,7 @@ func applyTheme(t Theme) {
 	styleModalBox = bg(lipgloss.NewStyle().Border(lipgloss.ThickBorder()).BorderForeground(colorAccent).Padding(1, 3))
 	styleModalBoxDanger = bg(lipgloss.NewStyle().Border(lipgloss.ThickBorder()).BorderForeground(colorError).Padding(1, 3))
 	styleModalTitle = bg(lipgloss.NewStyle().Bold(true).MarginBottom(1))
-	styleModalFilterBox = bg(lipgloss.NewStyle().Border(lipgloss.RoundedBorder()).BorderForeground(colorAccent).Padding(0, 1))
+	styleFilterBox = bg(lipgloss.NewStyle().Border(lipgloss.RoundedBorder()).BorderForeground(colorAccent).Padding(0, 1))
 
 	styleFieldLabel = bg(lipgloss.NewStyle().Width(10).Foreground(colorMuted))
 	styleFieldFocused = bg(lipgloss.NewStyle().Width(10).Bold(true).Foreground(colorAccent))
@@ -202,10 +185,14 @@ func applyTheme(t Theme) {
 	if t.FooterBackground != "" {
 		footerRepaint = ansiTrueColor(48, t.FooterBackground) + ansiTrueColor(38, t.FooterForeground)
 	}
+	// Computed unconditionally (not gated behind t.Surface, unlike the
+	// other *Repaint vars above): the cursor row's highlight needs to stay
+	// visible even under the ansi-* themes, which otherwise force no
+	// background at all - see sgrParam's doc comment.
+	primaryMarker = sgrParam(48, colorPrimary)
+	primaryRepaint = ansiColorCode(48, colorPrimary) + ansiColorCode(38, primaryFG)
 	if t.Surface != "" {
 		surfaceRepaint = ansiTrueColor(48, t.Surface) + ansiTrueColor(38, t.Foreground)
-		primaryMarker = ansiTrueColor(48, colorPrimary)
-		primaryRepaint = ansiTrueColor(48, colorPrimary) + ansiTrueColor(38, primaryFG)
 	}
 }
 
@@ -240,11 +227,12 @@ func relativeLuminance(hex string) float64 {
 	return (0.299*float64(r) + 0.587*float64(g) + 0.114*float64(b)) / 255
 }
 
-// ansiTrueColor builds a raw truecolor SGR sequence (kind 38 for
-// foreground, 48 for background) for a "#RRGGBB" lipgloss.Color, bypassing
-// lipgloss/termenv entirely so repaintCanvas can splice it directly into
-// an already-rendered string.
-func ansiTrueColor(kind int, c lipgloss.Color) string {
+// sgrParamTrueColor returns just the numeric SGR parameter (no leading
+// "\x1b[" or trailing "m") for a truecolor "#RRGGBB" lipgloss.Color - kind
+// 38 for foreground, 48 for background. Kept separate from the full
+// escape-code builders below because lineHasSGRParam needs the bare
+// parameter to search for, not a complete escape sequence.
+func sgrParamTrueColor(kind int, c lipgloss.Color) string {
 	hex := strings.TrimPrefix(string(c), "#")
 	if len(hex) != 6 {
 		return ""
@@ -255,7 +243,68 @@ func ansiTrueColor(kind int, c lipgloss.Color) string {
 	if err1 != nil || err2 != nil || err3 != nil {
 		return ""
 	}
-	return fmt.Sprintf("\x1b[%d;2;%d;%d;%dm", kind, r, g, b)
+	return fmt.Sprintf("%d;2;%d;%d;%d", kind, r, g, b)
+}
+
+// sgrParam is sgrParamTrueColor generalized to also handle the ansi-*
+// themes' plain decimal palette-index colors ("0".."15", standard/bright
+// ANSI), which have no hex to convert - used for the ledger's cursor-row
+// repaint, which (like Textual's own block-cursor highlight) needs to stay
+// visible even in the themes that otherwise leave every other background
+// untouched, since "which row is selected" has to be visible regardless
+// of theme.
+func sgrParam(kind int, c lipgloss.Color) string {
+	if p := sgrParamTrueColor(kind, c); p != "" {
+		return p
+	}
+	n, err := strconv.Atoi(string(c))
+	if err != nil || n < 0 || n > 15 {
+		return ""
+	}
+	base := 30
+	if kind == 48 {
+		base = 40
+	}
+	if n >= 8 {
+		base += 60 // bright range: 90-97 / 100-107
+		n -= 8
+	}
+	return strconv.Itoa(base + n)
+}
+
+// ansiTrueColor/ansiColorCode wrap sgrParamTrueColor/sgrParam into a
+// complete escape sequence, for splicing directly into an already-rendered
+// string (repaintWith).
+func ansiTrueColor(kind int, c lipgloss.Color) string {
+	p := sgrParamTrueColor(kind, c)
+	if p == "" {
+		return ""
+	}
+	return "\x1b[" + p + "m"
+}
+
+func ansiColorCode(kind int, c lipgloss.Color) string {
+	p := sgrParam(kind, c)
+	if p == "" {
+		return ""
+	}
+	return "\x1b[" + p + "m"
+}
+
+// lineHasSGRParam reports whether line contains an escape sequence that
+// sets the given bare SGR parameter (as returned by sgrParam/
+// sgrParamTrueColor) - either on its own ("\x1b[44m") or combined with
+// other attributes into one sequence ("\x1b[1;30;44m", which is what
+// lipgloss/termenv actually emits for a style with more than one property
+// set - never separate escape codes per property). Relies on background
+// always being the last property lipgloss adds when building a style's
+// escape sequence, so a combined sequence's color parameter is always
+// right before the final "m".
+func lineHasSGRParam(line, param string) bool {
+	if param == "" {
+		return false
+	}
+	return strings.Contains(line, "["+param+"m") || strings.Contains(line, ";"+param+"m")
 }
 
 // repaintWith re-stamps code (one of the *Repaint vars above) right after
@@ -283,17 +332,17 @@ func repaintCanvas(s string) string {
 // row is selected (every lipgloss Render() call resets fg+bg regardless
 // of what it actually set). Since each cell's own prefix otherwise
 // repaints its own background correctly, the only way to tell rows apart
-// after the fact is to look for the exact background prefix
-// styleTableCursor itself would have emitted (primaryMarker) - present
-// only on the selected row's line. Row 0 is always the header (Panel
-// background, not Surface).
+// after the fact is to look for the exact background parameter
+// styleTableCursor itself would have set (primaryMarker, via
+// lineHasSGRParam) - present only on the selected row's line. Row 0 is
+// always the header (Panel background, not Surface).
 func repaintLedgerView(s string) string {
 	lines := strings.Split(s, "\n")
 	for i, line := range lines {
 		switch {
 		case i == 0:
 			lines[i] = repaintWith(line, panelRepaint)
-		case primaryMarker != "" && strings.Contains(line, primaryMarker):
+		case lineHasSGRParam(line, primaryMarker):
 			lines[i] = repaintWith(line, primaryRepaint)
 		default:
 			lines[i] = repaintWith(line, surfaceRepaint)

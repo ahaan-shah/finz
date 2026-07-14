@@ -9,10 +9,11 @@ import (
 )
 
 // applySizes derives every widget's width/height from the last known
-// terminal size - mirrors the CSS layout: Header/Footer are 1 row each,
-// #ledger is 3fr wide, #sidebar is 1fr wide with a 38-column floor.
+// terminal size - mirrors the CSS layout: Header/Footer are 1 row each
+// (plus one blank spacer row under the header), #ledger is 3fr wide,
+// #sidebar is 1fr wide with a 38-column floor.
 func (m *model) applySizes() {
-	m.bodyHeight = m.height - 2
+	m.bodyHeight = m.height - 3 // header(1) + header spacer(1) + footer(1)
 	if m.bodyHeight < 1 {
 		m.bodyHeight = 1
 	}
@@ -33,9 +34,8 @@ func (m *model) applySizes() {
 		m.mainWidth = 10
 	}
 
-	m.yearFilter.Width = m.mainWidth - 6
-	m.monthFilter.Width = m.mainWidth - 6
-
+	m.yearFilter.Width = m.mainWidth - 8
+	m.monthFilter.Width = m.mainWidth - 8
 }
 
 // -- header / footer -------------------------------------------------------
@@ -107,52 +107,19 @@ func (m model) renderFooter() string {
 
 // -- year / month stage ----------------------------------------------------
 
-// renderYearMonthStage builds the filter Input box (height 3: border,
-// content, border) directly above the option-list box (fills the rest of
-// bodyHeight), both using Textual's own "tall" border glyphs.
+// renderYearMonthStage matches splitsy's own year/month-equivalent (the
+// groups list) exactly: a rounded-border filter Input box, then the
+// option list directly below it, bare - no box around the list itself.
 func (m model) renderYearMonthStage(filterView string, items []periodItem, cursor int) string {
-	innerWidth := m.mainWidth - 4
-	if innerWidth < 4 {
-		innerWidth = 4
-	}
-	filterBox := renderTallBox(filterView, innerWidth, 2)
+	filterBox := styleFilterBox.Width(m.mainWidth - 4).Render(filterView)
 
-	listHeight := m.bodyHeight - 3
+	listHeight := m.bodyHeight - 3 // the filter box's own height
 	if listHeight < 1 {
 		listHeight = 1
 	}
-	listView := renderPeriodList(items, cursor, innerWidth-2, listHeight)
-	listBox := renderTallBox(listView, innerWidth, 1)
+	listView := renderPeriodList(items, cursor, m.mainWidth, listHeight)
 
-	return lipgloss.JoinVertical(lipgloss.Left, filterBox, listBox)
-}
-
-// renderTallBox manually draws Textual's "tall" border (see tallBorder in
-// style.go) around already-rendered content, rather than handing that
-// content to another lipgloss Style.Render() call - wrapping pre-rendered
-// ANSI text (the filter Input's own cursor styling, or a period list's
-// cursor-row highlight) in a bordered Style().Render() call re-processes
-// it as one opaque run of text and corrupts the escape sequence stream
-// (the same class of bug renderBudgetBox's doc comment describes).
-func renderTallBox(content string, innerWidth, padding int) string {
-	top := styleAccent.Render(tallBorder.TopLeft + strings.Repeat(tallBorder.Top, innerWidth) + tallBorder.TopRight)
-	bottom := styleAccent.Render(tallBorder.BottomLeft + strings.Repeat(tallBorder.Bottom, innerWidth) + tallBorder.BottomRight)
-	left := styleAccent.Render(tallBorder.Left)
-	right := styleAccent.Render(tallBorder.Right)
-	pad := strings.Repeat(" ", padding)
-
-	lines := strings.Split(content, "\n")
-	out := make([]string, 0, len(lines)+2)
-	out = append(out, top)
-	for _, l := range lines {
-		trailing := innerWidth - 2*padding - lipgloss.Width(l)
-		if trailing < 0 {
-			trailing = 0
-		}
-		out = append(out, left+pad+l+strings.Repeat(" ", trailing)+pad+right)
-	}
-	out = append(out, bottom)
-	return repaintWith(strings.Join(out, "\n"), surfaceRepaint)
+	return lipgloss.JoinVertical(lipgloss.Left, filterBox, listView)
 }
 
 // renderPeriodList mirrors an OptionList's body: one line per item,
@@ -211,6 +178,15 @@ const ledgerDateWidth = 10 // "YYYY-MM-DD" is always exactly 10 characters
 // - see periodRows/tableCursor's doc comment in app.go for why this isn't
 // bubbles/table.
 func (m model) renderTableStage() string {
+	innerWidth := m.mainWidth - 2 // stylePaneBox{Focused,Unfocused}'s own left+right border
+	if innerWidth < 4 {
+		innerWidth = 4
+	}
+	innerHeight := m.bodyHeight - 2 // the box's top+bottom border
+	if innerHeight < 1 {
+		innerHeight = 1
+	}
+
 	balances := runningBalances(m.transactions)
 
 	type rowText struct {
@@ -247,7 +223,7 @@ func (m model) renderTableStage() string {
 
 	const leadingSpace = 1 // Textual's DataTable has a small implicit left inset
 	const gaps = 4*2 + leadingSpace
-	noteWidth := m.mainWidth - ledgerDateWidth - categoryWidth - amountWidth - balanceWidth - gaps
+	noteWidth := innerWidth - ledgerDateWidth - categoryWidth - amountWidth - balanceWidth - gaps
 	if noteWidth < lipgloss.Width("Note") {
 		noteWidth = lipgloss.Width("Note")
 	}
@@ -276,14 +252,55 @@ func (m model) renderTableStage() string {
 			padRight(truncateWidth(rt.note, noteWidth), noteWidth)
 
 		if i == m.tableCursor {
-			line = styleTableCursor.Render(padRight(line, m.mainWidth))
+			line = styleTableCursor.Render(padRight(line, innerWidth))
 		}
 		lines = append(lines, line)
 	}
-	for len(lines) < m.bodyHeight {
+	for len(lines) < innerHeight {
 		lines = append(lines, "")
 	}
-	return repaintLedgerView(strings.Join(lines, "\n"))
+	if len(lines) > innerHeight {
+		lines = lines[:innerHeight]
+	}
+	content := repaintLedgerView(strings.Join(lines, "\n"))
+	return renderPaneBox(content, innerWidth, !m.budgetFocused)
+}
+
+// renderPaneBox wraps already-rendered content in a full border box - thick
+// +accent when focused, thin+muted otherwise (splitsy's activity-table-pane
+// convention: Tab always has a visible effect on which pane looks
+// "active"). Every border glyph is colored via a plain foreground-only
+// style (styleAccent/styleMuted - no border of their own), and the
+// content is only ever concatenated next to those glyphs, never hand back
+// into a *bordered* style's Render(): that would draw a second, nested
+// box around whatever's passed to it (stylePaneBoxFocused/Unfocused carry
+// their own border config), and handing the whole panel back into a
+// Style{Width,Height}.Render() call at all triggers lipgloss's word-wrap
+// pass, which silently drops the mid-line repaint codes
+// repaintLedgerView just spent its whole effort inserting.
+func renderPaneBox(content string, innerWidth int, focused bool) string {
+	glyphStyle, border := styleMuted, lipgloss.NormalBorder()
+	if focused {
+		glyphStyle, border = styleAccent, lipgloss.ThickBorder()
+	}
+
+	top := glyphStyle.Render(border.TopLeft + strings.Repeat(border.Top, innerWidth) + border.TopRight)
+	bottom := glyphStyle.Render(border.BottomLeft + strings.Repeat(border.Bottom, innerWidth) + border.BottomRight)
+	left := glyphStyle.Render(border.Left)
+	right := glyphStyle.Render(border.Right)
+
+	lines := strings.Split(content, "\n")
+	out := make([]string, 0, len(lines)+2)
+	out = append(out, top)
+	for _, l := range lines {
+		pad := innerWidth - lipgloss.Width(l)
+		if pad < 0 {
+			pad = 0
+		}
+		out = append(out, left+l+strings.Repeat(" ", pad)+right)
+	}
+	out = append(out, bottom)
+	return repaintWith(strings.Join(out, "\n"), canvasRepaint)
 }
 
 // truncateWidth trims s to at most width columns (ansi-aware, though note
@@ -365,19 +382,17 @@ func (m model) renderBudgetBox() string {
 	}
 	top := styleAccent.Render("╭─" + title + strings.Repeat("─", dashes) + "╮")
 
-	inputWidth := innerWidth - 4
-	if inputWidth < 4 {
-		inputWidth = 4
-	}
-	input := renderTallBox(m.budgetInput.View(), inputWidth, 2)
-
 	good, warning, critical := colorSuccess, colorWarning, colorError
 	spent := totalSpent(filterByMonth(m.transactions, m.selectedPeriod()))
 	gauge := renderBudgetGauge(spent, m.settings.MonthlyBudget, func(v float64) string { return fmtAmount(v, m.settings.Currency) }, good, warning, critical, 14)
 
 	lines := []string{top}
-	for _, l := range strings.Split(input, "\n") {
-		lines = append(lines, styleAccent.Render("│ ")+l+styleAccent.Render(" │"))
+	for _, l := range strings.Split(m.budgetInput.View(), "\n") {
+		pad := innerWidth - 2 - lipgloss.Width(l)
+		if pad < 0 {
+			pad = 0
+		}
+		lines = append(lines, styleAccent.Render("│ ")+l+strings.Repeat(" ", pad)+styleAccent.Render(" │"))
 	}
 	for _, l := range strings.Split(gauge, "\n") {
 		pad := innerWidth - 2 - lipgloss.Width(l)
@@ -543,7 +558,7 @@ func (m model) View() string {
 		footer = m.renderFooter()
 	}
 
-	full := lipgloss.JoinVertical(lipgloss.Left, header, body, footer)
+	full := lipgloss.JoinVertical(lipgloss.Left, header, "", body, footer)
 	return repaintCanvas(fillCanvas(full, m.width, m.height))
 }
 
