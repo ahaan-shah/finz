@@ -76,13 +76,15 @@ var themes = []Theme{
 	{Name: "ansi-light", Dark: false, Background: "", Surface: "", Panel: "", Foreground: "", Primary: "4", Warning: "9", Error: "1", Success: "2", Accent: "5", Muted: "7", FooterBackground: "", FooterForeground: "", FooterKeyForeground: "5", FooterDescriptionForeground: ""},
 }
 
-// activeTheme defaults to ansi-dark, matching tui.py's on_mount hard-coding
-// `self.theme = "ansi-dark"` unconditionally on every launch - tally never
-// persists a theme choice to settings.json, so a session's theme pick is
-// intentionally forgotten the moment the app exits, same as the original.
-// (themes[0] is "textual-dark", not ansi-dark - Textual's own registration
-// order, kept as-is since that's the order the Theme command palette page
-// lists them in too - so this can't just be themes[0].)
+// activeTheme defaults to ansi-dark before settings are loaded (matching
+// tui.py's on_mount hard-coding `self.theme = "ansi-dark"`), but unlike the
+// Python original a picked theme *is* persisted to settings.json
+// (Settings.Theme) and restored on the next launch via setActiveTheme in
+// main.go - a deliberate deviation, since forgetting the user's theme pick
+// on every restart reads as a bug rather than a faithful behavior to
+// preserve. (themes[0] is "textual-dark", not ansi-dark - Textual's own
+// registration order, kept as-is since that's the order the Theme command
+// palette page lists them in too - so this can't just be themes[0].)
 var activeTheme = defaultTheme()
 
 func defaultTheme() Theme {

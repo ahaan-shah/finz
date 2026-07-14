@@ -208,6 +208,8 @@ func (m *model) submitPaletteSelection(opts []paletteOption) {
 	case paletteTheme:
 		name := opts[p.cursor].id
 		if setActiveTheme(name) {
+			m.settings.Theme = name
+			_ = SaveSettings(m.settings)
 			m.noticeMessage = "Theme changed"
 		}
 		m.closeModal()

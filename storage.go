@@ -22,6 +22,7 @@ type Settings struct {
 	LastTransactionID string  `json:"last_transaction_id,omitempty"`
 	LastYear          string  `json:"last_year,omitempty"`
 	LastMonth         string  `json:"last_month,omitempty"`
+	Theme             string  `json:"theme,omitempty"`
 }
 
 // DefaultSettings mirrors storage.py's DEFAULT_SETTINGS.

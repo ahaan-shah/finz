@@ -90,10 +90,15 @@ type model struct {
 }
 
 // NewModel mirrors FinanceApp.__init__ + on_mount: stage always starts at
-// "table" (only the selected year/month persist across launches), the
-// ledger table gets its Date/Category/Amount/Balance/Note columns, and the
-// budget input is pre-filled from settings if a budget was already set.
+// "table" (the selected year/month, the last theme, and the last currency
+// all persist across launches), the ledger table gets its
+// Date/Category/Amount/Balance/Note columns, and the budget input is
+// pre-filled from settings if a budget was already set.
 func NewModel(transactions []Transaction, settings Settings) model {
+	if settings.Theme != "" {
+		setActiveTheme(settings.Theme)
+	}
+
 	m := model{
 		transactions: transactions,
 		settings:     settings,

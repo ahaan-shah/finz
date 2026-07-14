@@ -171,9 +171,38 @@ func TestSettingsJSONOmitsUnsetOptionalFields(t *testing.T) {
 	if err := json.Unmarshal(data, &raw); err != nil {
 		t.Fatalf("Unmarshal: %v", err)
 	}
-	for _, key := range []string{"last_year", "last_month", "last_transaction_id"} {
+	for _, key := range []string{"last_year", "last_month", "last_transaction_id", "theme"} {
 		if _, present := raw[key]; present {
 			t.Fatalf("expected %q to be omitted from a fresh DefaultSettings(), got: %v", key, raw)
 		}
+	}
+}
+
+// TestThemeChoicePersistsAcrossLaunches guards against tally reverting to
+// always reopening on ansi-dark - a picked theme must round-trip through
+// settings.json and get applied by the next NewModel call, unlike the
+// Python original (which intentionally forgets it every launch).
+func TestThemeChoicePersistsAcrossLaunches(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	defer setActiveTheme("ansi-dark") // reset for other tests sharing package-level theme state
+
+	settings := DefaultSettings()
+	settings.Theme = "dracula"
+	if err := SaveSettings(settings); err != nil {
+		t.Fatalf("SaveSettings: %v", err)
+	}
+
+	loaded, err := LoadSettings()
+	if err != nil {
+		t.Fatalf("LoadSettings: %v", err)
+	}
+	if loaded.Theme != "dracula" {
+		t.Fatalf("expected loaded settings to keep the saved theme, got %q", loaded.Theme)
+	}
+
+	setActiveTheme("ansi-dark") // simulate the package-level default before a fresh launch
+	NewModel(nil, loaded)
+	if activeTheme.Name != "dracula" {
+		t.Fatalf("expected NewModel to apply the saved theme, got %q active", activeTheme.Name)
 	}
 }
