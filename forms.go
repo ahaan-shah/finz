@@ -12,9 +12,32 @@ import (
 
 var dateRE = regexp.MustCompile(`^\d{4}-\d{2}-\d{2}$`)
 
+// renderFieldRow/renderButtonRow match splitsy's (tally's Go sibling)
+// add/edit form chrome exactly: a fixed-width label (bold+accent with a
+// "▸" prefix when focused, muted otherwise) directly followed by the
+// input's own value - no per-field box - and a row of plain-colored-text
+// buttons with no visible button chrome at all.
+func renderFieldRow(label string, input textinput.Model, focused bool) string {
+	labelStyle := styleFieldLabel
+	prefix := "  "
+	if focused {
+		labelStyle = styleFieldFocused
+		prefix = styleAccent.Render("▸") + " "
+	}
+	return prefix + labelStyle.Render(label) + input.View()
+}
+
+func renderButtonRow(labels []string, styles []lipgloss.Style) string {
+	parts := make([]string, len(labels))
+	for i, l := range labels {
+		parts[i] = styles[i].Render(l)
+	}
+	return strings.Join(parts, "    ")
+}
+
 // transactionFormModel mirrors TransactionForm: a modal for adding a new
-// transaction or editing an existing one, four boxed inputs (date,
-// category, amount, note), Tab cycling between them, Enter from any field
+// transaction or editing an existing one, four fields (date, category,
+// amount, note), Tab cycling between them, Enter from any field
 // attempting a save (on_input_submitted fires for every Input in the
 // screen, not just the last one), Esc cancelling.
 type transactionFormModel struct {
@@ -32,22 +55,24 @@ type transactionFormModel struct {
 func newTransactionForm(editing *Transaction, defaultDate string) transactionFormModel {
 	mk := func(placeholder, value string) textinput.Model {
 		ti := textinput.New()
+		ti.Prompt = ""
 		ti.Placeholder = placeholder
+		ti.Width = 30
 		ti.SetValue(value)
 		return ti
 	}
 
 	f := transactionFormModel{editing: editing}
 	if editing != nil {
-		f.date = mk("Date (YYYY-MM-DD)", editing.Date)
-		f.category = mk("Category", editing.Category)
-		f.amount = mk("Amount (negative = income)", formatFixed2(editing.Amount))
-		f.note = mk("Note (optional)", editing.Note)
+		f.date = mk("YYYY-MM-DD", editing.Date)
+		f.category = mk("e.g. Food", editing.Category)
+		f.amount = mk("negative = income", formatFixed2(editing.Amount))
+		f.note = mk("optional", editing.Note)
 	} else {
-		f.date = mk("Date (YYYY-MM-DD)", defaultDate)
-		f.category = mk("Category", "")
-		f.amount = mk("Amount (negative = income)", "")
-		f.note = mk("Note (optional)", "")
+		f.date = mk("YYYY-MM-DD", defaultDate)
+		f.category = mk("e.g. Food", "")
+		f.amount = mk("negative = income", "")
+		f.note = mk("optional", "")
 	}
 	f.date.Focus()
 	return f
@@ -124,25 +149,30 @@ func (f *transactionFormModel) attemptSave() (Transaction, string) {
 	return NewTransaction(date, category, amount, note), ""
 }
 
-func (f transactionFormModel) View() string {
-	title := "Add transaction"
+func (f transactionFormModel) title() string {
 	if f.editing != nil {
-		title = "Edit transaction"
+		return "Edit transaction"
 	}
+	return "Add transaction"
+}
 
+func (f transactionFormModel) View() string {
 	var b strings.Builder
-	b.WriteString(title)
+	b.WriteString(styleModalTitle.Render(f.title()))
+	b.WriteString("\n")
+	b.WriteString(renderFieldRow("Date", f.date, f.focus == 0))
+	b.WriteString("\n")
+	b.WriteString(renderFieldRow("Category", f.category, f.focus == 1))
+	b.WriteString("\n")
+	b.WriteString(renderFieldRow("Amount", f.amount, f.focus == 2))
+	b.WriteString("\n")
+	b.WriteString(renderFieldRow("Note", f.note, f.focus == 3))
 	b.WriteString("\n\n")
-	for _, field := range f.fields() {
-		b.WriteString(renderTallBox(field.View(), 46, 2))
-		b.WriteString("\n\n")
-	}
 	if f.errorMsg != "" {
 		b.WriteString(styleError.Render(f.errorMsg))
+		b.WriteString("\n\n")
 	}
-	b.WriteString("\n")
-	b.WriteString(centerLine(styleButtonCancel.Render("Cancel")+"   "+styleButtonSave.Render("Save"), 50))
-
+	b.WriteString(renderButtonRow([]string{"Cancel", "Save"}, []lipgloss.Style{styleButtonCancel, styleButtonSave}))
 	return styleModalBox.Render(b.String())
 }
 
@@ -159,17 +189,10 @@ func newConfirmDelete(message string) confirmDeleteModel {
 
 func (c confirmDeleteModel) View() string {
 	var b strings.Builder
+	b.WriteString(styleModalTitle.Render("Confirm delete"))
+	b.WriteString("\n")
 	b.WriteString(c.message)
 	b.WriteString("\n\n")
-	b.WriteString(centerLine(styleButtonCancel.Render("Cancel")+"   "+styleButtonDelete.Render("Delete"), 46))
-	return styleModalBoxDanger.Width(46).Render(b.String())
-}
-
-func centerLine(s string, width int) string {
-	w := lipgloss.Width(s)
-	if w >= width {
-		return s
-	}
-	left := (width - w) / 2
-	return strings.Repeat(" ", left) + s
+	b.WriteString(renderButtonRow([]string{"Cancel (esc)", "Delete (enter)"}, []lipgloss.Style{styleButtonCancel, styleButtonDelete}))
+	return styleModalBoxDanger.Render(b.String())
 }

@@ -6,18 +6,21 @@ import (
 
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
 )
 
 // The command palette (ctrl+p) mirrors Textual's own built-in command
 // palette, which tui.py adds "Currency" and "Export CSV" entries to
 // alongside Textual's built-in "Theme" - here it's all one hand-rolled
-// palette, since there's no framework providing it for free. Root entries
-// show a bold title and a dim description line beneath, matching what
-// Textual's palette actually renders (SimpleCommand/SystemCommand always
-// carry both). "Keybindings" is this port's own addition (Textual's
-// palette also lists framework commands like Keys/Maximize/Screenshot/
-// Quit that don't have a meaningful terminal-app equivalent here, so
-// they're swapped for a reference page instead).
+// palette, since there's no framework providing it for free. Rendering is
+// deliberately styled to match splitsy (tally's Go sibling) one for one -
+// a single-line "▸ label  hint" entry per row - rather than Textual's own
+// two-line title+description palette look. "Keybindings" is this port's
+// own addition (Textual's palette also lists framework commands like
+// Keys/Maximize/Screenshot/Quit that don't have a meaningful terminal-app
+// equivalent here, so they're swapped for a reference page instead), and
+// "Export" is a sub-page offering CSV/XLSX/JSON, matching splitsy's own
+// Export sub-page exactly.
 
 type paletteStage string
 
@@ -25,6 +28,7 @@ const (
 	paletteRoot     paletteStage = "root"
 	paletteCurrency paletteStage = "currency"
 	paletteTheme    paletteStage = "theme"
+	paletteExport   paletteStage = "export"
 	paletteKeybinds paletteStage = "keybinds"
 )
 
@@ -42,7 +46,8 @@ type paletteModel struct {
 
 func newPalette() paletteModel {
 	ti := textinput.New()
-	ti.Placeholder = "Search for commands…"
+	ti.Prompt = "/ "
+	ti.Placeholder = "Type a command..."
 	ti.Focus()
 	return paletteModel{stage: paletteRoot, filter: ti}
 }
@@ -51,8 +56,19 @@ func rootPaletteOptions() []paletteOption {
 	return []paletteOption{
 		{id: "currency", title: "Currency", desc: "Choose the currency amounts are displayed in"},
 		{id: "theme", title: "Theme", desc: "Change the current theme"},
-		{id: "export", title: "Export CSV", desc: "Write a dated ledger export to your data directory"},
+		{id: "export", title: "Export", desc: "Write all activity to a file"},
 		{id: "keybinds", title: "Keybindings", desc: "Show all keyboard shortcuts"},
+	}
+}
+
+// exportPaletteOptions lists the file formats the Export sub-page offers -
+// every one of them lands in ~/Downloads (see downloadsDir in storage.go),
+// same as any other download a browser hands you.
+func exportPaletteOptions() []paletteOption {
+	return []paletteOption{
+		{id: "csv", title: "CSV", desc: "Opens in any spreadsheet app"},
+		{id: "xlsx", title: "XLSX", desc: "Excel workbook"},
+		{id: "json", title: "JSON", desc: "For scripts and other tools"},
 	}
 }
 
@@ -99,6 +115,8 @@ func (m *model) currentPaletteOptions() []paletteOption {
 		return filterOptions(currencyPaletteOptions(), m.palette.filter.Value())
 	case paletteTheme:
 		return filterOptions(themePaletteOptions(), m.palette.filter.Value())
+	case paletteExport:
+		return filterOptions(exportPaletteOptions(), m.palette.filter.Value())
 	case paletteKeybinds:
 		return nil
 	default:
@@ -165,11 +183,21 @@ func (m *model) submitPaletteSelection(opts []paletteOption) {
 			p.stage, p.cursor = paletteTheme, 0
 			p.filter.SetValue("")
 		case "export":
-			m.exportCSV()
-			m.closeModal()
+			p.stage, p.cursor = paletteExport, 0
+			p.filter.SetValue("")
 		case "keybinds":
 			p.stage = paletteKeybinds
 		}
+	case paletteExport:
+		switch opts[p.cursor].id {
+		case "csv":
+			m.exportFile(ExportCSV)
+		case "xlsx":
+			m.exportFile(ExportXLSX)
+		case "json":
+			m.exportFile(ExportJSON)
+		}
+		m.closeModal()
 	case paletteCurrency:
 		code := opts[p.cursor].id
 		m.settings.Currency = code
@@ -188,13 +216,17 @@ func (m *model) submitPaletteSelection(opts []paletteOption) {
 	}
 }
 
-func (m *model) exportCSV() {
-	path, err := ExportCSV(m.transactions)
+// exportFile runs any of the ExportXxx([]Transaction) (string, error)
+// functions in storage.go and turns the result into the same notice/
+// error banner treatment, regardless of which format was picked on the
+// Export sub-page - mirrors splitsy's exportFile exactly.
+func (m *model) exportFile(export func([]Transaction) (string, error)) {
+	path, err := export(m.transactions)
 	if err != nil {
 		m.errorMessage = "Export failed: " + err.Error()
 		return
 	}
-	m.noticeMessage = "Exported ledger to " + filepath.Base(path)
+	m.noticeMessage = "Exported to ~/Downloads/" + filepath.Base(path)
 }
 
 // -- rendering --------------------------------------------------------------
@@ -205,6 +237,8 @@ func (p paletteModel) View() string {
 		return renderPaletteList("Currency", p.filter, filterOptions(currencyPaletteOptions(), p.filter.Value()), p.cursor)
 	case paletteTheme:
 		return renderPaletteList("Theme", p.filter, filterOptions(themePaletteOptions(), p.filter.Value()), p.cursor)
+	case paletteExport:
+		return renderPaletteList("Export", p.filter, filterOptions(exportPaletteOptions(), p.filter.Value()), p.cursor)
 	case paletteKeybinds:
 		return renderKeybindsPage()
 	default:
@@ -212,28 +246,34 @@ func (p paletteModel) View() string {
 	}
 }
 
+// renderPaletteList matches splitsy's renderPaletteList exactly: a bold
+// title, a rounded-border filter box, then one "▸ label  hint" line per
+// option (bold + accent arrow when selected, plain otherwise) - no boxed
+// rows, no two-line title/description layout.
 func renderPaletteList(title string, filter textinput.Model, opts []paletteOption, cursor int) string {
 	var b strings.Builder
-	b.WriteString(styleBold.Render(title))
+	b.WriteString(styleModalTitle.Render(title))
 	b.WriteString("\n")
-	b.WriteString(renderTallBox(filter.View(), 44, 2))
+	b.WriteString(styleModalFilterBox.Width(36).Render(filter.View()))
 	b.WriteString("\n\n")
 
 	if len(opts) == 0 {
-		b.WriteString(styleMuted.Italic(true).Render("No matches"))
+		b.WriteString(styleMuted.Render("No matches"))
 		b.WriteString("\n")
 	}
 	for i, o := range opts {
-		line := styleBold.Render(o.title)
+		prefix := "  "
+		nameStyle := lipgloss.NewStyle()
 		if i == cursor {
-			line = styleTableCursor.Render(padRight(o.title, 44))
+			prefix = styleAccent.Render("▸") + " "
+			nameStyle = styleBold
+		}
+		line := prefix + nameStyle.Render(o.title)
+		if o.desc != "" {
+			line += "  " + styleMuted.Render(o.desc)
 		}
 		b.WriteString(line)
 		b.WriteString("\n")
-		if o.desc != "" {
-			b.WriteString(styleMuted.Render("  " + o.desc))
-			b.WriteString("\n")
-		}
 	}
 	b.WriteString("\n")
 	b.WriteString(styleMuted.Render("esc: back   enter: select"))
@@ -242,7 +282,7 @@ func renderPaletteList(title string, filter textinput.Model, opts []paletteOptio
 
 func renderKeybindsPage() string {
 	var b strings.Builder
-	b.WriteString(styleBold.Render("Keybindings"))
+	b.WriteString(styleModalTitle.Render("Keybindings"))
 	b.WriteString("\n")
 
 	section := func(name string, rows [][2]string) {

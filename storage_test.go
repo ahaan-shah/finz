@@ -87,8 +87,42 @@ func TestLoadSettingsDefaultsMissingFields(t *testing.T) {
 	}
 }
 
+// withFakeHome points $HOME (and, on Windows, the equivalent
+// os.UserHomeDir() actually reads) at a scratch dir for the duration of
+// the test, so export tests never touch the real user's ~/Downloads.
+func withFakeHome(t *testing.T) string {
+	t.Helper()
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
+	return home
+}
+
+func testExportFormat(t *testing.T, export func([]Transaction) (string, error), wantExt string) {
+	t.Helper()
+	home := withFakeHome(t)
+	transactions := []Transaction{
+		NewTransaction("2026-07-01", "Food", 100, "Groceries"),
+		NewTransaction("2026-07-02", "Transport", 50, "Bus"),
+	}
+	path, err := export(transactions)
+	if err != nil {
+		t.Fatalf("export: %v", err)
+	}
+	if filepath.Ext(path) != wantExt {
+		t.Fatalf("expected a %s file, got %s", wantExt, path)
+	}
+	wantDir := filepath.Join(home, "Downloads")
+	if filepath.Dir(path) != wantDir {
+		t.Fatalf("expected the export in %s, got %s", wantDir, path)
+	}
+	if _, err := os.Stat(path); err != nil {
+		t.Fatalf("expected the export file to exist: %v", err)
+	}
+}
+
 func TestExportCSVWritesRunningBalance(t *testing.T) {
-	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	home := withFakeHome(t)
 	transactions := []Transaction{
 		NewTransaction("2026-07-01", "Food", 100, "Groceries"),
 		NewTransaction("2026-07-02", "Transport", 50, "Bus"),
@@ -97,8 +131,8 @@ func TestExportCSVWritesRunningBalance(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ExportCSV: %v", err)
 	}
-	if filepath.Ext(path) != ".csv" {
-		t.Fatalf("expected a .csv file, got %s", path)
+	if filepath.Dir(path) != filepath.Join(home, "Downloads") {
+		t.Fatalf("expected the export in ~/Downloads, got %s", path)
 	}
 	data, err := os.ReadFile(path)
 	if err != nil {
@@ -110,6 +144,14 @@ func TestExportCSVWritesRunningBalance(t *testing.T) {
 			t.Fatalf("export missing %q, got:\n%s", want, content)
 		}
 	}
+}
+
+func TestExportXLSXWritesToDownloads(t *testing.T) {
+	testExportFormat(t, ExportXLSX, ".xlsx")
+}
+
+func TestExportJSONWritesToDownloads(t *testing.T) {
+	testExportFormat(t, ExportJSON, ".json")
 }
 
 func TestSettingsJSONOmitsUnsetOptionalFields(t *testing.T) {

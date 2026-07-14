@@ -39,21 +39,33 @@ var (
 	styleFooterDescription lipgloss.Style
 	styleFooterSeparator   lipgloss.Style
 
-	// styleBudgetBox is the bordered "Budget" box at the top of the
-	// sidebar (border: round $accent, width 28).
-	styleBudgetBox lipgloss.Style
-
-	// Modal chrome: TransactionForm's dialog border is thick $accent,
-	// ConfirmDelete's is thick $error - both background $surface.
+	// Modal chrome (add/edit/delete transaction, command palette) is
+	// deliberately styled to match splitsy - tally's Go sibling - one for
+	// one, not Textual's own modal look: lipgloss's stock ThickBorder()
+	// preset rather than Textual's blocky "thick" glyphs, plain label+
+	// value field rows with no per-field box, and plain-text buttons.
 	styleModalBox       lipgloss.Style
 	styleModalBoxDanger lipgloss.Style
+	styleModalTitle     lipgloss.Style
 
-	// Plain-text buttons, stripped of Textual's default button chrome
-	// (border/filled background) down to plain colored text, per
-	// TransactionForm/ConfirmDelete's #buttons Button CSS.
-	styleButtonCancel lipgloss.Style // $text-muted
-	styleButtonSave   lipgloss.Style // $primary, bold
-	styleButtonDelete lipgloss.Style // $error, bold
+	// styleModalFilterBox boxes the command palette's search Input -
+	// splitsy's rounded-border convention, distinct from the tall-bordered
+	// boxes the year/month picker still uses (that picker stays faithful
+	// to Textual's own Input/OptionList look, which nothing here asked to
+	// change).
+	styleModalFilterBox lipgloss.Style
+
+	// styleFieldLabel/Focused are the add/edit form's row labels - fixed
+	// width, muted normally, bold+accent (with a "▸" prefix) while that
+	// field has focus - matching splitsy's renderFieldRow exactly.
+	styleFieldLabel   lipgloss.Style
+	styleFieldFocused lipgloss.Style
+
+	// Plain-text buttons, no box - matching splitsy's stripped-down modal
+	// buttons (which themselves mirror Textual's Button CSS reset).
+	styleButtonCancel lipgloss.Style
+	styleButtonSave   lipgloss.Style
+	styleButtonDelete lipgloss.Style
 
 	// styleTableCursor is the DataTable's focused-cursor row highlight
 	// ($block-cursor-background, which equals $primary for every built-in
@@ -105,20 +117,6 @@ var tallBorder = lipgloss.Border{
 	TopRight:    "▎",
 	BottomLeft:  "▊",
 	BottomRight: "▎",
-}
-
-// textualThickBorder reproduces Textual's built-in "thick" border exactly
-// (textual/_border.py) - what `border: thick $accent/$error` actually
-// draws, distinct from lipgloss's own ThickBorder() preset.
-var textualThickBorder = lipgloss.Border{
-	Top:         "▀",
-	Bottom:      "▄",
-	Left:        "█",
-	Right:       "█",
-	TopLeft:     "█",
-	TopRight:    "█",
-	BottomLeft:  "█",
-	BottomRight: "█",
 }
 
 func init() {
@@ -175,27 +173,16 @@ func applyTheme(t Theme) {
 	styleFooterDescription = styleFooter.Foreground(t.FooterDescriptionForeground)
 	styleFooterSeparator = styleFooter.Foreground(t.Foreground).Faint(true)
 
-	surfaceBG := t.Surface
-	styleBudgetBox = lipgloss.NewStyle().BorderStyle(lipgloss.RoundedBorder()).BorderForeground(colorAccent).Padding(0, 1)
-	if surfaceBG != "" {
-		styleBudgetBox = styleBudgetBox.Background(surfaceBG).BorderBackground(surfaceBG)
-	}
+	styleModalBox = bg(lipgloss.NewStyle().Border(lipgloss.ThickBorder()).BorderForeground(colorAccent).Padding(1, 3))
+	styleModalBoxDanger = bg(lipgloss.NewStyle().Border(lipgloss.ThickBorder()).BorderForeground(colorError).Padding(1, 3))
+	styleModalTitle = bg(lipgloss.NewStyle().Bold(true).MarginBottom(1))
+	styleModalFilterBox = bg(lipgloss.NewStyle().Border(lipgloss.RoundedBorder()).BorderForeground(colorAccent).Padding(0, 1))
 
-	styleModalBox = lipgloss.NewStyle().Border(textualThickBorder).BorderForeground(colorAccent).Padding(1, 2)
-	styleModalBoxDanger = lipgloss.NewStyle().Border(textualThickBorder).BorderForeground(colorError).Padding(1, 2)
-	if surfaceBG != "" {
-		styleModalBox = styleModalBox.Background(surfaceBG).BorderBackground(surfaceBG)
-		styleModalBoxDanger = styleModalBoxDanger.Background(surfaceBG).BorderBackground(surfaceBG)
-	}
-
-	styleButtonCancel = lipgloss.NewStyle().Foreground(colorMuted)
-	styleButtonSave = lipgloss.NewStyle().Bold(true).Foreground(colorPrimary)
-	styleButtonDelete = lipgloss.NewStyle().Bold(true).Foreground(colorError)
-	if surfaceBG != "" {
-		styleButtonCancel = styleButtonCancel.Background(surfaceBG)
-		styleButtonSave = styleButtonSave.Background(surfaceBG)
-		styleButtonDelete = styleButtonDelete.Background(surfaceBG)
-	}
+	styleFieldLabel = bg(lipgloss.NewStyle().Width(10).Foreground(colorMuted))
+	styleFieldFocused = bg(lipgloss.NewStyle().Width(10).Bold(true).Foreground(colorAccent))
+	styleButtonCancel = bg(lipgloss.NewStyle().Foreground(colorMuted))
+	styleButtonSave = bg(lipgloss.NewStyle().Bold(true).Foreground(colorPrimary))
+	styleButtonDelete = bg(lipgloss.NewStyle().Bold(true).Foreground(colorError))
 
 	primaryFG := cursorForeground(t)
 	styleTableCursor = lipgloss.NewStyle().Bold(true).Background(colorPrimary).Foreground(primaryFG)

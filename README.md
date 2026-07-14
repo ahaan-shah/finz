@@ -8,7 +8,7 @@ A terminal personal finance tracker — a Go/[bubbletea](https://github.com/char
 - A year → month → ledger drill-down, with per-period totals at every step
 - A monthly budget gauge and category/month spending charts
 - 21 built-in color themes, switchable from the command palette
-- CSV export
+- Export to CSV, XLSX, or JSON — always dropped in `~/Downloads`
 
 Everything is stored locally — no account, no server, no sync.
 
@@ -49,8 +49,8 @@ First launch seeds a few sample transactions so the ledger isn't empty. From the
 | `ctrl+p` | command palette — currency, themes, export, keybindings |
 | `q` / `ctrl+c` | quit |
 
-Your data lives at `~/.config/tally/` (or your OS's equivalent).
+Your data lives at `~/.config/tally/` (or your OS's equivalent). Exports (CSV/XLSX/JSON, via the command palette's "Export" entry) always land in `~/Downloads`, dated like `export-2026-07-14.csv`.
 
 ## Relation to the Python original
 
-This is a faithful port, not a redesign — navigation, layout, colors, and keybinds all aim to match the original one-to-one, down to reproducing Textual's exact border glyphs and widget layout math. The one intentional difference is where data is stored: a standalone Go binary has no fixed "next to the script" location the way a cloned Python repo does, so `tally` uses `~/.config/tally` instead.
+This is a faithful port, not a redesign — navigation, layout, colors, and keybinds all aim to match the original one-to-one, down to reproducing Textual's exact border glyphs and widget layout math. Two intentional differences: where data is stored (a standalone Go binary has no fixed "next to the script" location the way a cloned Python repo does, so `tally` uses `~/.config/tally` instead), and the add/edit/delete modals plus the command palette, which are styled to match [splitsy](https://github.com/ahaan-shah/splitsy) — tally's Go sibling — instead of Textual's own modal chrome.

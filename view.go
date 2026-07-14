@@ -510,7 +510,7 @@ func (m model) View() string {
 	}
 
 	if m.modal != modalNone {
-		return placeOnCanvas(m.width, m.height, repaintWith(m.renderModal(), surfaceRepaint))
+		return placeOnCanvas(m.width, m.height, repaintCanvas(m.renderModal()))
 	}
 
 	header := m.renderHeader()
