@@ -245,13 +245,14 @@ func (m model) renderTableStage() string {
 		}
 	}
 
-	const gaps = 4 * 2 // a 2-space gap between each of the 5 columns
+	const leadingSpace = 1 // Textual's DataTable has a small implicit left inset
+	const gaps = 4*2 + leadingSpace
 	noteWidth := m.mainWidth - ledgerDateWidth - categoryWidth - amountWidth - balanceWidth - gaps
 	if noteWidth < lipgloss.Width("Note") {
 		noteWidth = lipgloss.Width("Note")
 	}
 
-	header := styleBold.Render(padRight("Date", ledgerDateWidth)) + "  " +
+	header := " " + styleBold.Render(padRight("Date", ledgerDateWidth)) + "  " +
 		styleBold.Render(padRight("Category", categoryWidth)) + "  " +
 		styleBold.Render(padRight("Amount", amountWidth)) + "  " +
 		styleBold.Render(padRight("Balance", balanceWidth)) + "  " +
@@ -268,7 +269,7 @@ func (m model) renderTableStage() string {
 			balanceStyle = styleError.Bold(true)
 		}
 
-		line := padRight(rt.date, ledgerDateWidth) + "  " +
+		line := " " + padRight(rt.date, ledgerDateWidth) + "  " +
 			padRight(rt.category, categoryWidth) + "  " +
 			amountStyle.Render(padRight(rt.amountPlain, amountWidth)) + "  " +
 			balanceStyle.Render(padRight(rt.balancePlain, balanceWidth)) + "  " +
