@@ -304,7 +304,15 @@ func truncateWidth(s string, width int) string {
 // renderSidebar mirrors the Python original's entirely stage-dependent
 // right pane: empty while picking a year, only the spend-by-month chart
 // while picking a month, and the full budget/summary/chart dashboard once
-// a specific month's ledger is open.
+// a specific month's ledger is open. Built by hand (border character +
+// padding concatenated onto each line) rather than handing the already-
+// rendered, ANSI-heavy body to styleSidebar.Render() - a color-bearing
+// Style's Render() re-processes its *entire* input as one opaque run of
+// text, and doing that to text that already contains embedded escape
+// sequences from earlier Render() calls corrupts the stream (this is what
+// made every non-ansi-* theme render as a blank pane before this fix -
+// ansi-dark/light happened to work because their styles carry no color
+// properties at all, so the risky re-processing was accidentally a no-op).
 func (m model) renderSidebar() string {
 	var body string
 	switch m.stage {
@@ -315,8 +323,27 @@ func (m model) renderSidebar() string {
 	default:
 		body = m.renderBudgetBox() + "\n\n" + m.renderSummary() + "\n\n" + m.renderChart()
 	}
-	box := styleSidebar.Width(m.sidebarWidth).Height(m.bodyHeight).Render(body)
-	return repaintWith(box, canvasRepaint)
+
+	innerHeight := m.bodyHeight - 2 // Padding(1, 2)'s top/bottom inset
+	if innerHeight < 1 {
+		innerHeight = 1
+	}
+	lines := strings.Split(body, "\n")
+	for len(lines) < innerHeight {
+		lines = append(lines, "")
+	}
+	if len(lines) > innerHeight {
+		lines = lines[:innerHeight]
+	}
+
+	border := styleAccent.Render("│")
+	out := make([]string, 0, innerHeight+2)
+	out = append(out, "")
+	for _, l := range lines {
+		out = append(out, border+"  "+l)
+	}
+	out = append(out, "")
+	return repaintWith(strings.Join(out, "\n"), canvasRepaint)
 }
 
 // renderBudgetBox mirrors the "Budget" box: round $accent border, a
@@ -517,7 +544,24 @@ func (m model) View() string {
 	}
 
 	full := lipgloss.JoinVertical(lipgloss.Left, header, body, footer)
-	return styleAppCanvas.Width(m.width).Height(m.height).Render(repaintCanvas(full))
+	return repaintCanvas(fillCanvas(full, m.width, m.height))
+}
+
+// fillCanvas pads s out to exactly width x height with the active theme's
+// background/foreground, using lipgloss.Place (ansi-aware, only ever
+// *appends* whitespace - never re-processes s itself) rather than
+// styleAppCanvas.Width(w).Height(h).Render(s), which - like renderSidebar
+// used to - would hand the fully-composed, ANSI-heavy frame back into a
+// color-bearing Style's Render() and corrupt it.
+func fillCanvas(s string, width, height int) string {
+	if appBackground == "" {
+		return lipgloss.PlaceVertical(height, lipgloss.Top, lipgloss.PlaceHorizontal(width, lipgloss.Left, s))
+	}
+	opts := []lipgloss.WhitespaceOption{
+		lipgloss.WithWhitespaceBackground(appBackground),
+		lipgloss.WithWhitespaceForeground(appForeground),
+	}
+	return lipgloss.PlaceVertical(height, lipgloss.Top, lipgloss.PlaceHorizontal(width, lipgloss.Left, s, opts...), opts...)
 }
 
 // placeOnCanvas centers content over a full-screen fill of the active

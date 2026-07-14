@@ -39,8 +39,6 @@ var (
 	styleFooterDescription lipgloss.Style
 	styleFooterSeparator   lipgloss.Style
 
-	styleSidebar lipgloss.Style
-
 	// styleBudgetBox is the bordered "Budget" box at the top of the
 	// sidebar (border: round $accent, width 28).
 	styleBudgetBox lipgloss.Style
@@ -62,9 +60,8 @@ var (
 	// theme except rose-pine-dawn - approximated as $primary throughout).
 	styleTableCursor lipgloss.Style
 
-	appBackground  lipgloss.Color
-	appForeground  lipgloss.Color
-	styleAppCanvas lipgloss.Style
+	appBackground lipgloss.Color
+	appForeground lipgloss.Color
 
 	// canvasRepaint/panelRepaint/footerRepaint/surfaceRepaint/
 	// primaryRepaint are each a raw "\x1b[48;2;...m\x1b[38;2;...m" pair for
@@ -153,12 +150,6 @@ func applyTheme(t Theme) {
 		}
 		return s.Background(t.Background)
 	}
-	borderBG := func(s lipgloss.Style, c lipgloss.Color) lipgloss.Style {
-		if c == "" {
-			return s
-		}
-		return s.BorderBackground(c)
-	}
 
 	styleBold = bg(lipgloss.NewStyle().Bold(true))
 	styleMuted = bg(lipgloss.NewStyle().Foreground(colorMuted))
@@ -185,8 +176,6 @@ func applyTheme(t Theme) {
 	styleFooterSeparator = styleFooter.Foreground(t.Foreground).Faint(true)
 
 	surfaceBG := t.Surface
-	styleSidebar = borderBG(bg(lipgloss.NewStyle().Padding(1, 2).BorderStyle(lipgloss.NormalBorder()).BorderLeft(true).BorderForeground(colorAccent)), t.Background)
-
 	styleBudgetBox = lipgloss.NewStyle().BorderStyle(lipgloss.RoundedBorder()).BorderForeground(colorAccent).Padding(0, 1)
 	if surfaceBG != "" {
 		styleBudgetBox = styleBudgetBox.Background(surfaceBG).BorderBackground(surfaceBG)
@@ -211,7 +200,6 @@ func applyTheme(t Theme) {
 	primaryFG := cursorForeground(t)
 	styleTableCursor = lipgloss.NewStyle().Bold(true).Background(colorPrimary).Foreground(primaryFG)
 
-	styleAppCanvas = bg(lipgloss.NewStyle())
 	canvasRepaint = ""
 	panelRepaint = ""
 	footerRepaint = ""
@@ -219,7 +207,6 @@ func applyTheme(t Theme) {
 	primaryRepaint = ""
 	primaryMarker = ""
 	if t.Background != "" {
-		styleAppCanvas = styleAppCanvas.Foreground(t.Foreground)
 		canvasRepaint = ansiTrueColor(48, t.Background) + ansiTrueColor(38, t.Foreground)
 	}
 	if t.Panel != "" {
