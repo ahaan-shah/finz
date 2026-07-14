@@ -291,10 +291,18 @@ func ansiColorCode(kind int, c lipgloss.Color) string {
 	return "\x1b[" + p + "m"
 }
 
-// repaintWith re-stamps code (one of the *Repaint vars above) right after
-// every reset embedded in s - see the canvasRepaint doc comment for why
-// this is necessary. A no-op if code is empty (the ansi-* themes never
-// populate any of these).
+// repaintWith re-stamps code (one of the *Repaint vars above) at the start
+// of every line and right after every reset embedded in it - see the
+// canvasRepaint doc comment for why this is necessary. A no-op if code is
+// empty (the ansi-* themes never populate any of these).
+//
+// The leading stamp matters for lines built by centering/padding an
+// already-rendered ANSI fragment (lipgloss.Style.Align(Center), say): the
+// padding spaces lipgloss inserts *before* the fragment's first escape
+// code carry no color of their own, so without an explicit prefix they'd
+// sit on whatever the terminal's ambient background happens to be instead
+// of the theme's - this is what left a plain-black block to the left of a
+// centered header title on every non-ansi-* theme.
 //
 // Operates per line (s may be a single line or a whole multi-line frame -
 // repaintCanvas calls it on the entire composed frame in one shot) and
@@ -314,7 +322,7 @@ func repaintWith(s, code string) string {
 	}
 	lines := strings.Split(s, "\n")
 	for i, line := range lines {
-		out := strings.ReplaceAll(line, "\x1b[0m", "\x1b[0m"+code)
+		out := code + strings.ReplaceAll(line, "\x1b[0m", "\x1b[0m"+code)
 		out = strings.TrimSuffix(out, code)
 		lines[i] = out
 	}
