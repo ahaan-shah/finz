@@ -71,6 +71,10 @@ var (
 	// theme except rose-pine-dawn - approximated as $primary throughout).
 	styleTableCursor lipgloss.Style
 
+	// styleLedgerHeaderText is Bold with *no* baked-in background, unlike
+	// the package-level styleBold - see its call site in view.go for why.
+	styleLedgerHeaderText lipgloss.Style
+
 	appBackground lipgloss.Color
 	appForeground lipgloss.Color
 
@@ -94,12 +98,6 @@ var (
 	footerRepaint  string
 	surfaceRepaint string
 	primaryRepaint string
-
-	// primaryMarker is the bare SGR parameter (see sgrParam) for
-	// colorPrimary's background - used with lineHasSGRParam to tell the
-	// ledger's cursor row apart from every other line when repainting the
-	// table's rendered output (see repaintLedgerView).
-	primaryMarker string
 )
 
 func init() {
@@ -169,13 +167,13 @@ func applyTheme(t Theme) {
 
 	primaryFG := cursorForeground(t)
 	styleTableCursor = lipgloss.NewStyle().Bold(true).Background(colorPrimary).Foreground(primaryFG)
+	styleLedgerHeaderText = lipgloss.NewStyle().Bold(true)
 
 	canvasRepaint = ""
 	panelRepaint = ""
 	footerRepaint = ""
 	surfaceRepaint = ""
 	primaryRepaint = ""
-	primaryMarker = ""
 	if t.Background != "" {
 		canvasRepaint = ansiTrueColor(48, t.Background) + ansiTrueColor(38, t.Foreground)
 	}
@@ -188,8 +186,7 @@ func applyTheme(t Theme) {
 	// Computed unconditionally (not gated behind t.Surface, unlike the
 	// other *Repaint vars above): the cursor row's highlight needs to stay
 	// visible even under the ansi-* themes, which otherwise force no
-	// background at all - see sgrParam's doc comment.
-	primaryMarker = sgrParam(48, colorPrimary)
+	// background at all.
 	primaryRepaint = ansiColorCode(48, colorPrimary) + ansiColorCode(38, primaryFG)
 	if t.Surface != "" {
 		surfaceRepaint = ansiTrueColor(48, t.Surface) + ansiTrueColor(38, t.Foreground)
@@ -229,9 +226,8 @@ func relativeLuminance(hex string) float64 {
 
 // sgrParamTrueColor returns just the numeric SGR parameter (no leading
 // "\x1b[" or trailing "m") for a truecolor "#RRGGBB" lipgloss.Color - kind
-// 38 for foreground, 48 for background. Kept separate from the full
-// escape-code builders below because lineHasSGRParam needs the bare
-// parameter to search for, not a complete escape sequence.
+// 38 for foreground, 48 for background. Kept separate from
+// ansiTrueColor/ansiColorCode below only so they can share this logic.
 func sgrParamTrueColor(kind int, c lipgloss.Color) string {
 	hex := strings.TrimPrefix(string(c), "#")
 	if len(hex) != 6 {
@@ -249,10 +245,10 @@ func sgrParamTrueColor(kind int, c lipgloss.Color) string {
 // sgrParam is sgrParamTrueColor generalized to also handle the ansi-*
 // themes' plain decimal palette-index colors ("0".."15", standard/bright
 // ANSI), which have no hex to convert - used for the ledger's cursor-row
-// repaint, which (like Textual's own block-cursor highlight) needs to stay
-// visible even in the themes that otherwise leave every other background
-// untouched, since "which row is selected" has to be visible regardless
-// of theme.
+// repaint (primaryRepaint), which (like Textual's own block-cursor
+// highlight) needs to stay visible even in the themes that otherwise
+// leave every other background untouched, since "which row is selected"
+// has to be visible regardless of theme.
 func sgrParam(kind int, c lipgloss.Color) string {
 	if p := sgrParamTrueColor(kind, c); p != "" {
 		return p
@@ -291,31 +287,34 @@ func ansiColorCode(kind int, c lipgloss.Color) string {
 	return "\x1b[" + p + "m"
 }
 
-// lineHasSGRParam reports whether line contains an escape sequence that
-// sets the given bare SGR parameter (as returned by sgrParam/
-// sgrParamTrueColor) - either on its own ("\x1b[44m") or combined with
-// other attributes into one sequence ("\x1b[1;30;44m", which is what
-// lipgloss/termenv actually emits for a style with more than one property
-// set - never separate escape codes per property). Relies on background
-// always being the last property lipgloss adds when building a style's
-// escape sequence, so a combined sequence's color parameter is always
-// right before the final "m".
-func lineHasSGRParam(line, param string) bool {
-	if param == "" {
-		return false
-	}
-	return strings.Contains(line, "["+param+"m") || strings.Contains(line, ";"+param+"m")
-}
-
 // repaintWith re-stamps code (one of the *Repaint vars above) right after
 // every reset embedded in s - see the canvasRepaint doc comment for why
 // this is necessary. A no-op if code is empty (the ansi-* themes never
 // populate any of these).
+//
+// Operates per line (s may be a single line or a whole multi-line frame -
+// repaintCanvas calls it on the entire composed frame in one shot) and
+// deliberately leaves each *line's own trailing* reset alone: SGR
+// background state isn't cleared by a bare "\n" in a real terminal, so a
+// line that ends in "reset, then immediately re-set the background again"
+// leaves that color active for whatever comes next - a blank spacer line,
+// or the next widget's own first character, which inherits it if that
+// character's style never set an explicit background of its own (border
+// glyphs in particular: BorderForeground alone doesn't imply a matching
+// BorderBackground). Only re-stamping *interior* resets (an amount cell
+// finishing partway through a ledger row, say) and leaving the line's
+// final reset as a clean reset is what actually stops that bleed.
 func repaintWith(s, code string) string {
 	if code == "" {
 		return s
 	}
-	return strings.ReplaceAll(s, "\x1b[0m", "\x1b[0m"+code)
+	lines := strings.Split(s, "\n")
+	for i, line := range lines {
+		out := strings.ReplaceAll(line, "\x1b[0m", "\x1b[0m"+code)
+		out = strings.TrimSuffix(out, code)
+		lines[i] = out
+	}
+	return strings.Join(lines, "\n")
 }
 
 // repaintCanvas is repaintWith for the general app-canvas background -
@@ -330,19 +329,26 @@ func repaintCanvas(s string) string {
 // wraps that whole already-composed line in one more Render() call, so
 // everything after the first colored cell goes unpainted the instant a
 // row is selected (every lipgloss Render() call resets fg+bg regardless
-// of what it actually set). Since each cell's own prefix otherwise
-// repaints its own background correctly, the only way to tell rows apart
-// after the fact is to look for the exact background parameter
-// styleTableCursor itself would have set (primaryMarker, via
-// lineHasSGRParam) - present only on the selected row's line. Row 0 is
-// always the header (Panel background, not Surface).
-func repaintLedgerView(s string) string {
+// of what it actually set). cursorLine is which line (already known by
+// the caller - lines[0] is always the header) gets the cursor's own
+// primary-background repaint instead of the ordinary surface one.
+//
+// This used to detect the cursor line by searching each line's text for
+// the literal background escape code styleTableCursor would have
+// emitted - that broke silently on some themes, because lipgloss's own
+// truecolor rendering (which goes through a color-space round trip) can
+// round a hex value to a *different* decimal RGB than a direct hex-to-int
+// parse of the same "#RRGGBB" string (off by 1 in one channel), so the
+// hand-built marker byte-for-byte never matched what lipgloss actually
+// wrote. Tracking the row by index instead of by sniffing its rendered
+// color sidesteps that whole class of bug.
+func repaintLedgerView(s string, cursorLine int) string {
 	lines := strings.Split(s, "\n")
 	for i, line := range lines {
 		switch {
 		case i == 0:
 			lines[i] = repaintWith(line, panelRepaint)
-		case lineHasSGRParam(line, primaryMarker):
+		case i == cursorLine:
 			lines[i] = repaintWith(line, primaryRepaint)
 		default:
 			lines[i] = repaintWith(line, surfaceRepaint)

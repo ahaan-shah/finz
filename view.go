@@ -8,34 +8,42 @@ import (
 	"github.com/charmbracelet/lipgloss"
 )
 
+// sidebarWidth is fixed (not a fraction of terminal width), matching
+// splitsy exactly: the sidebar's own content has a fixed natural width
+// (the Budget box is a hard-coded 28 columns), so there's nothing to gain
+// from making its reserved width proportional, and a fixed value keeps
+// the math simple and predictable at every terminal size, right down to
+// the smallest ones - see applySizes' floors for how those are handled.
+const sidebarWidth = 38
+
 // applySizes derives every widget's width/height from the last known
 // terminal size - mirrors the CSS layout: Header/Footer are 1 row each
-// (plus one blank spacer row under the header), #ledger is 3fr wide,
-// #sidebar is 1fr wide with a 38-column floor.
+// (plus one blank spacer row under the header), #ledger gets whatever
+// width is left after the sidebar. mainWidth/bodyHeight floors (matching
+// splitsy's own applySizes) keep every downstream width/height
+// calculation safely positive even in a very small terminal - below
+// them the app renders wider/taller than the terminal and gets clipped,
+// rather than trying to squeeze further (same tradeoff splitsy makes).
 func (m *model) applySizes() {
 	m.bodyHeight = m.height - 3 // header(1) + header spacer(1) + footer(1)
-	if m.bodyHeight < 1 {
-		m.bodyHeight = 1
+	if m.bodyHeight < 3 {
+		m.bodyHeight = 3
 	}
 
-	sidebarWidth := m.width / 4
-	if sidebarWidth < 38 {
-		sidebarWidth = 38
-	}
-	if sidebarWidth > m.width-20 {
-		sidebarWidth = m.width - 20
-	}
-	if sidebarWidth < 10 {
-		sidebarWidth = 10
-	}
 	m.sidebarWidth = sidebarWidth
 	m.mainWidth = m.width - sidebarWidth
-	if m.mainWidth < 10 {
-		m.mainWidth = 10
+	if m.mainWidth < 40 {
+		m.mainWidth = 40
 	}
 
 	m.yearFilter.Width = m.mainWidth - 8
+	if m.yearFilter.Width < 4 {
+		m.yearFilter.Width = 4
+	}
 	m.monthFilter.Width = m.mainWidth - 8
+	if m.monthFilter.Width < 4 {
+		m.monthFilter.Width = 4
+	}
 }
 
 // -- header / footer -------------------------------------------------------
@@ -223,16 +231,52 @@ func (m model) renderTableStage() string {
 
 	const leadingSpace = 1 // Textual's DataTable has a small implicit left inset
 	const gaps = 4*2 + leadingSpace
-	noteWidth := innerWidth - ledgerDateWidth - categoryWidth - amountWidth - balanceWidth - gaps
-	if noteWidth < lipgloss.Width("Note") {
-		noteWidth = lipgloss.Width("Note")
+
+	// If every column at its natural width doesn't fit innerWidth, Note is
+	// sacrificed first (down to hidden entirely), then Category shrinks
+	// (Date/Amount/Balance are either fixed-format or money - truncating
+	// them would misrepresent a value, which Category truncating to "Ent…"
+	// doesn't). This has to happen *before* Note's width is settled:
+	// clamping it up to a minimum without shrinking anything else used to
+	// let the row overflow innerWidth outright, pushing its right edge
+	// past the pane's own border.
+	const categoryFloor = 6 // below this a name truncates to 1-2 unhelpful letters - sacrifice Note first instead
+	minNoteWidth := lipgloss.Width("Note")
+
+	fixedWidth := ledgerDateWidth + amountWidth + balanceWidth + gaps
+	available := innerWidth - fixedWidth // shared between Category and Note
+	var noteWidth int
+	if available < categoryFloor {
+		categoryWidth = available
+		if categoryWidth < 1 {
+			categoryWidth = 1
+		}
+		noteWidth = 0
+	} else {
+		if categoryWidth > available {
+			categoryWidth = available
+		}
+		noteWidth = available - categoryWidth
+		if noteWidth < minNoteWidth {
+			noteWidth = 0
+		}
 	}
 
-	header := " " + styleBold.Render(padRight("Date", ledgerDateWidth)) + "  " +
-		styleBold.Render(padRight("Category", categoryWidth)) + "  " +
-		styleBold.Render(padRight("Amount", amountWidth)) + "  " +
-		styleBold.Render(padRight("Balance", balanceWidth)) + "  " +
-		styleBold.Render(padRight("Note", noteWidth))
+	// styleLedgerHeaderText (bold only, no baked-in background) rather
+	// than the package-level styleBold: styleBold bakes in the general
+	// canvas background (see applyTheme's bg helper), which fights with
+	// repaintLedgerView forcing the *panel* background onto this row the
+	// instant they're different colors (most themes) - each cell's own
+	// canvas-colored reset was winning over the panel repaint for
+	// everything after the first cell, producing a patchwork of
+	// differently-colored blocks across the header.
+	header := " " + styleLedgerHeaderText.Render(padRight("Date", ledgerDateWidth)) + "  " +
+		styleLedgerHeaderText.Render(padRight(truncateWidth("Category", categoryWidth), categoryWidth)) + "  " +
+		styleLedgerHeaderText.Render(padRight("Amount", amountWidth)) + "  " +
+		styleLedgerHeaderText.Render(padRight("Balance", balanceWidth))
+	if noteWidth > 0 {
+		header += "  " + styleLedgerHeaderText.Render(padRight(truncateWidth("Note", noteWidth), noteWidth))
+	}
 
 	lines := []string{header}
 	for i, rt := range texts {
@@ -246,10 +290,12 @@ func (m model) renderTableStage() string {
 		}
 
 		line := " " + padRight(rt.date, ledgerDateWidth) + "  " +
-			padRight(rt.category, categoryWidth) + "  " +
+			padRight(truncateWidth(rt.category, categoryWidth), categoryWidth) + "  " +
 			amountStyle.Render(padRight(rt.amountPlain, amountWidth)) + "  " +
-			balanceStyle.Render(padRight(rt.balancePlain, balanceWidth)) + "  " +
-			padRight(truncateWidth(rt.note, noteWidth), noteWidth)
+			balanceStyle.Render(padRight(rt.balancePlain, balanceWidth))
+		if noteWidth > 0 {
+			line += "  " + padRight(truncateWidth(rt.note, noteWidth), noteWidth)
+		}
 
 		if i == m.tableCursor {
 			line = styleTableCursor.Render(padRight(line, innerWidth))
@@ -262,7 +308,8 @@ func (m model) renderTableStage() string {
 	if len(lines) > innerHeight {
 		lines = lines[:innerHeight]
 	}
-	content := repaintLedgerView(strings.Join(lines, "\n"))
+	// lines[0] is the header; a data row i sits at lines[i+1].
+	content := repaintLedgerView(strings.Join(lines, "\n"), m.tableCursor+1)
 	return renderPaneBox(content, innerWidth, !m.budgetFocused)
 }
 
@@ -341,7 +388,10 @@ func (m model) renderSidebar() string {
 		body = m.renderBudgetBox() + "\n\n" + m.renderSummary() + "\n\n" + m.renderChart()
 	}
 
-	innerHeight := m.bodyHeight - 2 // Padding(1, 2)'s top/bottom inset
+	// No leading blank row: the sidebar's first content row (the Budget
+	// box's own top border, in the table stage) needs to line up exactly
+	// with the ledger pane's top border on the left.
+	innerHeight := m.bodyHeight
 	if innerHeight < 1 {
 		innerHeight = 1
 	}
@@ -354,12 +404,10 @@ func (m model) renderSidebar() string {
 	}
 
 	border := styleAccent.Render("│")
-	out := make([]string, 0, innerHeight+2)
-	out = append(out, "")
+	out := make([]string, 0, innerHeight)
 	for _, l := range lines {
 		out = append(out, border+"  "+l)
 	}
-	out = append(out, "")
 	return repaintWith(strings.Join(out, "\n"), canvasRepaint)
 }
 
