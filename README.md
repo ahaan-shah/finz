@@ -6,7 +6,7 @@ Pretty much entirely vibecoded 👾
 
 ## Preview ✨
 
-<video src="preview.mp4" controls></video>
+<video src="https://raw.githubusercontent.com/ahaan-shah/finz/main/preview.mp4" controls></video>
 
 ## Features
 
