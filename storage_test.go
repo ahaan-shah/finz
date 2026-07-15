@@ -178,7 +178,7 @@ func TestSettingsJSONOmitsUnsetOptionalFields(t *testing.T) {
 	}
 }
 
-// TestThemeChoicePersistsAcrossLaunches guards against tally reverting to
+// TestThemeChoicePersistsAcrossLaunches guards against finz reverting to
 // always reopening on ansi-dark - a picked theme must round-trip through
 // settings.json and get applied by the next NewModel call, unlike the
 // Python original (which intentionally forgets it every launch).

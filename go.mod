@@ -1,4 +1,4 @@
-module github.com/ahaan-shah/tally
+module github.com/ahaan-shah/finz
 
 go 1.26.5
 
