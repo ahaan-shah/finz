@@ -6,7 +6,7 @@ Pretty much entirely vibecoded 👾
 
 ## Preview ✨
 
-<video src="https://github.com/user-attachments/assets/de5a28cd-47e0-49a3-a310-7e6e300b5e61" controls></video>
+<video src="https://github.com/user-attachments/assets/1809c21c-a8e7-4a60-b8d7-6a20422e338a" controls></video>
 
 ## Features
 
