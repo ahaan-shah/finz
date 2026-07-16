@@ -30,18 +30,18 @@ func DefaultSettings() Settings {
 	return Settings{Currency: "USD", MonthlyBudget: 0.0}
 }
 
-// dataDir returns ~/.config/finz (or the platform equivalent), creating it
+// dataDir returns ~/.config/pear (or the platform equivalent), creating it
 // if necessary. The Python original keeps transactions.json/settings.json
 // next to the source files; a Go binary has no such fixed "next to the
 // script" location once installed, so this uses the same XDG convention as
-// splitsy (finz's Go sibling) instead - an internal storage-location
+// splitsy (pear's Go sibling) instead - an internal storage-location
 // choice, not a user-visible behavior difference.
 func dataDir() (string, error) {
 	base, err := os.UserConfigDir()
 	if err != nil {
 		return "", err
 	}
-	dir := filepath.Join(base, "finz")
+	dir := filepath.Join(base, "pear")
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return "", err
 	}
@@ -49,10 +49,10 @@ func dataDir() (string, error) {
 }
 
 // downloadsDir returns ~/Downloads, creating it if necessary. Every export
-// format lands here rather than in dataDir() - dataDir is where finz's
+// format lands here rather than in dataDir() - dataDir is where pear's
 // own state lives, but an export is something the user asked for and
 // wants to actually find, and every OS already puts a "Downloads" folder
-// in front of the user for exactly that. Matches splitsy (finz's Go
+// in front of the user for exactly that. Matches splitsy (pear's Go
 // sibling) exactly.
 func downloadsDir() (string, error) {
 	home, err := os.UserHomeDir()
@@ -169,7 +169,7 @@ func SaveSettings(s Settings) error {
 // exportHeader/exportRecord/exportRows are the shared row model behind
 // every export format, so CSV/XLSX/JSON can never drift apart on what a
 // row of activity actually contains - mirrors splitsy's exportHeader/
-// exportRecord/exportRows exactly, adapted to finz's Transaction shape.
+// exportRecord/exportRows exactly, adapted to pear's Transaction shape.
 var exportHeader = []string{"date", "category", "amount", "note", "balance"}
 
 type exportRecord struct {

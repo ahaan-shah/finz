@@ -12,7 +12,7 @@ import (
 
 var dateRE = regexp.MustCompile(`^\d{4}-\d{2}-\d{2}$`)
 
-// renderFieldRow/renderButtonRow match splitsy's (finz's Go sibling)
+// renderFieldRow/renderButtonRow match splitsy's (pear's Go sibling)
 // add/edit form chrome exactly: a fixed-width label (bold+accent with a
 // "▸" prefix when focused, muted otherwise) directly followed by the
 // input's own value - no per-field box - and a row of plain-colored-text

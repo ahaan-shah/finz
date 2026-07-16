@@ -1,4 +1,4 @@
-# Finz
+# Pear
 
 **A terminal personal finance tracker.**
 
@@ -51,10 +51,10 @@ Works the same on:
 ## Installation
 
 ```bash
-go install github.com/ahaan-shah/finz@latest
+go install github.com/ahaan-shah/pear@latest
 ```
 
-This drops a `finz` binary in `$(go env GOPATH)/bin` (usually `~/go/bin`). Make sure that's on your `PATH`:
+This drops a `pear` binary in `$(go env GOPATH)/bin` (usually `~/go/bin`). Make sure that's on your `PATH`:
 
 ```bash
 # add to your shell config (~/.zshrc, ~/.bashrc, whatever you're rocking)
@@ -64,16 +64,16 @@ export PATH="$HOME/go/bin:$PATH"
 Reload your shell, then just run:
 
 ```bash
-finz
+pear
 ```
 
 ### Building from source (if you wanna clone this repo)
 
 ```bash
-git clone https://github.com/ahaan-shah/finz.git
-cd finz
-go build -o finz .
-./finz
+git clone https://github.com/ahaan-shah/pear.git
+cd pear
+go build -o pear .
+./pear
 ```
 
 ## Quick start
@@ -90,7 +90,7 @@ First launch seeds a few sample transactions so the ledger isn't empty. From the
 | `ctrl+p` | command palette — currency, themes, export, keybindings |
 | `q` / `ctrl+c` | quit |
 
-Your data lives at `~/.config/finz/` (or your OS's equivalent). Exports always land in `~/Downloads`.
+Your data lives at `~/.config/pear/` (or your OS's equivalent). Exports always land in `~/Downloads`.
 
 ## License
 

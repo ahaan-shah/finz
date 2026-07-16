@@ -48,7 +48,7 @@ func (m *model) applySizes() {
 
 // -- header / footer -------------------------------------------------------
 
-// renderHeader is just the centered "Finz — Finance Tracker" title, no
+// renderHeader is just the centered "Pear — Finance Tracker" title, no
 // bar/background/icon/clock-space of its own - matches splitsy's own
 // title treatment exactly (plain text, centered, sitting directly on the
 // app's canvas background) rather than reproducing Textual's docked-icon-
@@ -58,7 +58,7 @@ func (m *model) applySizes() {
 // close cleanly, and a plain title sitting on the ambient canvas color
 // never has that problem in the first place.
 func (m model) renderHeader() string {
-	titleText := styleBold.Render("Finz") + styleMuted.Render(" — Finance Tracker")
+	titleText := styleBold.Render("Pear") + styleMuted.Render(" — Finance Tracker")
 	return lipgloss.NewStyle().Width(m.width).Align(lipgloss.Center).Render(titleText)
 }
 
@@ -558,7 +558,7 @@ func padLeftTo(s string, width int) string {
 
 func (m model) View() string {
 	if m.width == 0 {
-		return "finz: loading...\n"
+		return "pear: loading...\n"
 	}
 
 	if m.modal != modalNone {

@@ -26,20 +26,20 @@ func seedIfEmpty(transactions []Transaction) []Transaction {
 func main() {
 	transactions, err := LoadTransactions()
 	if err != nil {
-		fmt.Fprintln(os.Stderr, "finz: failed to load transactions:", err)
+		fmt.Fprintln(os.Stderr, "pear: failed to load transactions:", err)
 		os.Exit(1)
 	}
 	transactions = seedIfEmpty(transactions)
 
 	settings, err := LoadSettings()
 	if err != nil {
-		fmt.Fprintln(os.Stderr, "finz: failed to load settings:", err)
+		fmt.Fprintln(os.Stderr, "pear: failed to load settings:", err)
 		os.Exit(1)
 	}
 
 	p := tea.NewProgram(NewModel(transactions, settings), tea.WithAltScreen())
 	if _, err := p.Run(); err != nil {
-		fmt.Fprintln(os.Stderr, "finz:", err)
+		fmt.Fprintln(os.Stderr, "pear:", err)
 		os.Exit(1)
 	}
 }

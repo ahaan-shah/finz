@@ -50,7 +50,7 @@ type Theme struct {
 // themes is the exact built-in theme roster of the installed Textual
 // version tui.py runs against (21 themes: App.available_themes as of
 // textual's current release) - not a curated subset, the whole registry,
-// since finz's command palette Theme page is Textual's own built-in one
+// since pear's command palette Theme page is Textual's own built-in one
 // and lists every one of them.
 var themes = []Theme{
 	{Name: "textual-dark", Dark: true, Background: "#121212", Surface: "#1E1E1E", Panel: "#242F38", Foreground: "#E0E0E0", Primary: "#0178D4", Warning: "#FEA62B", Error: "#B93C5B", Success: "#4EBF71", Accent: "#FEA62B", Muted: "#A0A0A0", FooterBackground: "#242F38", FooterForeground: "#E0E0E0", FooterKeyForeground: "#FFA62B", FooterDescriptionForeground: "#E0E0E0"},

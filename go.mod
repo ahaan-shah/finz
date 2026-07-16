@@ -1,4 +1,4 @@
-module github.com/ahaan-shah/finz
+module github.com/ahaan-shah/pear
 
 go 1.26.5
 

@@ -13,7 +13,7 @@ import (
 // palette, which tui.py adds "Currency" and "Export CSV" entries to
 // alongside Textual's built-in "Theme" - here it's all one hand-rolled
 // palette, since there's no framework providing it for free. Rendering is
-// deliberately styled to match splitsy (finz's Go sibling) one for one -
+// deliberately styled to match splitsy (pear's Go sibling) one for one -
 // a single-line "▸ label  hint" entry per row - rather than Textual's own
 // two-line title+description palette look. "Keybindings" is this port's
 // own addition (Textual's palette also lists framework commands like

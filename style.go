@@ -38,7 +38,7 @@ var (
 	styleFooterSeparator   lipgloss.Style
 
 	// Modal chrome (add/edit/delete transaction, command palette) is
-	// deliberately styled to match splitsy - finz's Go sibling - one for
+	// deliberately styled to match splitsy - pear's Go sibling - one for
 	// one, not Textual's own modal look: lipgloss's stock ThickBorder()
 	// preset rather than Textual's blocky "thick" glyphs, plain label+
 	// value field rows with no per-field box, and plain-text buttons.
